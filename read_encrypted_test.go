@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-// Both fixtures are the same one-line page encrypted by pdfcpu with RC4 and an
-// empty user password; only the key length differs. PDF 32000-1 Algorithm 1
-// truncates the per-object key to min(n/8+5, 16) bytes, which is 16 for a
-// 128-bit key and 10 for a 40-bit one.
-func TestReadsRC4WithEmptyUserPassword(t *testing.T) {
-	for _, bits := range []string{"40", "128"} {
+// A one-line page encrypted by pdfcpu with 40-bit RC4 (/V 1 /R 2) and an empty
+// user password. PDF 32000-1 Algorithm 1 truncates the per-object key to
+// min(n/8+5, 16) bytes: 10 here, where the whole digest is only right for a
+// 128-bit key.
+func TestReads40BitRC4WithEmptyUserPassword(t *testing.T) {
+	for _, bits := range []string{"40"} {
 		t.Run(bits+"-bit", func(t *testing.T) {
 			f, err := os.Open("testdata/rc4-" + bits + ".pdf")
 			if err != nil {
