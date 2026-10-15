@@ -806,8 +806,14 @@ func (v Value) Reader() io.ReadCloser {
 	if !ok {
 		return &errorReadCloser{fmt.Errorf("stream not present")}
 	}
+	length := v.Key("Length").Int64()
+	// A zero-length stream holds no data under any filter. Decoders such as
+	// zlib read a header at once and fail on zero bytes, so it is not filtered.
+	if length == 0 {
+		return ioutil.NopCloser(bytes.NewReader(nil))
+	}
 	var rd io.Reader
-	rd = io.NewSectionReader(v.r.f, x.offset, v.Key("Length").Int64())
+	rd = io.NewSectionReader(v.r.f, x.offset, length)
 	if v.r.key != nil {
 		rd = decryptStream(v.r.key, v.r.useAES, x.ptr, rd)
 	}
