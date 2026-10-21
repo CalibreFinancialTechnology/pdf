@@ -130,10 +130,26 @@ func NewReader(f io.ReaderAt, size int64) (*Reader, error) {
 // If the PDF is encrypted, NewReaderEncrypted calls pw repeatedly to obtain passwords
 // to try. If pw returns the empty string, NewReaderEncrypted stops trying to decrypt
 // the file and returns an error.
+// knownPDFHeader accepts %PDF-1.0 through %PDF-1.7 and %PDF-2.0 (ISO 32000-2),
+// each followed by a line end. Any other version stays refused: an unknown
+// version should fail loudly rather than be read as if it were understood.
+func knownPDFHeader(buf []byte) bool {
+	if len(buf) < 9 {
+		return false
+	}
+	switch {
+	case bytes.HasPrefix(buf, []byte("%PDF-1.")) && buf[7] >= '0' && buf[7] <= '7':
+	case bytes.HasPrefix(buf, []byte("%PDF-2.0")):
+	default:
+		return false
+	}
+	return buf[8] == '\r' || buf[8] == '\n'
+}
+
 func NewReaderEncrypted(f io.ReaderAt, size int64, pw func() string) (*Reader, error) {
 	buf := make([]byte, 10)
 	f.ReadAt(buf, 0)
-	if !bytes.HasPrefix(buf, []byte("%PDF-1.")) || buf[7] < '0' || buf[7] > '7' || buf[8] != '\r' && buf[8] != '\n' {
+	if !knownPDFHeader(buf) {
 		return nil, fmt.Errorf("not a PDF file: invalid header")
 	}
 	end := size
