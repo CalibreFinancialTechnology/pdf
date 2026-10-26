@@ -131,7 +131,8 @@ func NewReader(f io.ReaderAt, size int64) (*Reader, error) {
 // to try. If pw returns the empty string, NewReaderEncrypted stops trying to decrypt
 // the file and returns an error.
 // knownPDFHeader accepts %PDF-1.0 through %PDF-1.7 and %PDF-2.0 (ISO 32000-2),
-// each followed by a line end. Any other version stays refused: an unknown
+// followed by a line end, a space or a tab; a space may lead into text such as
+// a scanner's name. Any other version stays refused: an unknown
 // version should fail loudly rather than be read as if it were understood.
 func knownPDFHeader(buf []byte) bool {
 	if len(buf) < 9 {
@@ -143,7 +144,7 @@ func knownPDFHeader(buf []byte) bool {
 	default:
 		return false
 	}
-	return buf[8] == '\r' || buf[8] == '\n'
+	return buf[8] == '\r' || buf[8] == '\n' || buf[8] == ' ' || buf[8] == '\t'
 }
 
 func NewReaderEncrypted(f io.ReaderAt, size int64, pw func() string) (*Reader, error) {
