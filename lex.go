@@ -466,7 +466,9 @@ func (b *buffer) readArray() object {
 	var x array
 	for {
 		tok := b.readToken()
-		if tok == nil || tok == keyword("]") {
+		// A content stream can end inside an array. readToken then answers
+		// io.EOF on every call, so without this check the loop never ends.
+		if tok == nil || tok == io.EOF || tok == keyword("]") {
 			break
 		}
 		b.unreadToken(tok)
