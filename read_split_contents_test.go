@@ -14,8 +14,12 @@ import (
 // boundaries (ISO 32000-1, 7.8.2), and Microsoft Word's PDF export cuts them
 // like this.
 func splitContentsPDF() []byte {
-	first := "BT /F1 12 Tf 72 720 Td [(split)"
-	second := "-250 (across)] TJ ET"
+	return twoPieceContentsPDF("BT /F1 12 Tf 72 720 Td [(split)", "-250 (across)] TJ ET")
+}
+
+// twoPieceContentsPDF builds a one-page PDF whose /Contents is the two given
+// streams, in order.
+func twoPieceContentsPDF(first, second string) []byte {
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -67,5 +71,25 @@ func TestAnArraySplitAcrossTwoContentStreamsIsRead(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("reading an array split across two content streams did not return within 5 s")
+	}
+}
+
+// A cut may fall between two keywords with no space either side: "Tj" ends one
+// piece and "ET" begins the next. Joined without a separator they read as one
+// unknown keyword "TjET" and the first piece's text is never shown.
+func TestTwoKeywordsEitherSideOfACutStayTwoKeywords(t *testing.T) {
+	data := twoPieceContentsPDF("BT /F1 12 Tf 72 720 Td (the first piece is shown) Tj", "ET BT /F1 12 Tf 72 700 Td (the second piece is shown) Tj ET")
+	r, err := NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	text, err := r.Page(1).GetPlainText(nil)
+
+	if err != nil {
+		t.Fatalf("page text: %v", err)
+	}
+	if !strings.Contains(text, "the first piece is shown") || !strings.Contains(text, "the second piece is shown") {
+		t.Fatalf("page text %q does not carry both pieces", text)
 	}
 }
