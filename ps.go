@@ -7,6 +7,7 @@ package pdf
 import (
 	"fmt"
 	"io"
+	"strings"
 )
 
 // A Stack represents a stack of values.
@@ -56,19 +57,25 @@ func newDict() Value {
 func Interpret(strm Value, do func(stk *Stack, op string)) {
 	var stk Stack
 	var dicts []dict
-	s := strm
-	strmlen := 1
+	// A page's /Contents array is one content stream cut into pieces at token
+	// boundaries (ISO 32000-1, 7.8.2), and an object such as a TJ array may
+	// run across a cut. So the pieces are read as one stream, a newline
+	// between each, and each piece is opened only when the reader reaches it.
+	var rd io.Reader
 	if strm.Kind() == Array {
-		strmlen = strm.Len()
+		parts := make([]io.Reader, 0, 2*strm.Len())
+		for i := 0; i < strm.Len(); i++ {
+			if i > 0 {
+				parts = append(parts, strings.NewReader("\n"))
+			}
+			parts = append(parts, &openOnRead{v: strm.Index(i)})
+		}
+		rd = io.MultiReader(parts...)
+	} else {
+		rd = strm.Reader()
 	}
 
-	for i := 0; i < strmlen; i++ {
-		if strm.Kind() == Array {
-			s = strm.Index(i)
-		}
-
-		rd := s.Reader()
-
+	{
 		b := newBuffer(rd, 0)
 		b.allowEOF = true
 		b.allowObjptr = false
@@ -153,4 +160,19 @@ func (r *seqReader) ReadAt(buf []byte, offset int64) (int, error) {
 	n, err := io.ReadFull(r.rd, buf)
 	r.offset += int64(n)
 	return n, err
+}
+
+// openOnRead opens a stream's reader on its first Read, so a piece of a
+// content array that cannot be opened fails only once the pieces before it
+// have been interpreted.
+type openOnRead struct {
+	v  Value
+	rd io.Reader
+}
+
+func (o *openOnRead) Read(p []byte) (int, error) {
+	if o.rd == nil {
+		o.rd = o.v.Reader()
+	}
+	return o.rd.Read(p)
 }
