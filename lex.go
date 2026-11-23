@@ -45,6 +45,9 @@ type buffer struct {
 	key         []byte
 	useAES      bool
 	objptr      objptr
+	// nextPiece opens the next piece of a page's content array, or returns
+	// nil when there is none. Nil outside a content array.
+	nextPiece func() io.Reader
 }
 
 // newBuffer returns a new buffer reading from r at the given offset.
@@ -56,6 +59,24 @@ func newBuffer(r io.Reader, offset int64) *buffer {
 		allowObjptr: true,
 		allowStream: true,
 	}
+}
+
+// advancePiece moves the buffer on to the next piece of a content array, so
+// an array cut at a piece boundary carries on into the next piece. It reports
+// false when there is no next piece.
+func (b *buffer) advancePiece() bool {
+	if b.nextPiece == nil {
+		return false
+	}
+	r := b.nextPiece()
+	if r == nil {
+		return false
+	}
+	b.r = r
+	b.buf = b.buf[:0]
+	b.pos = 0
+	b.eof = false
+	return true
 }
 
 func (b *buffer) seek(offset int64) {
@@ -190,11 +211,18 @@ func (b *buffer) readHexString() token {
 			break
 		}
 		if isSpace(c) {
+			// readByte answers '\n' for ever once the stream has ended.
+			if b.eof {
+				break
+			}
 			goto Loop
 		}
 	Loop2:
 		c2 := b.readByte()
 		if isSpace(c2) {
+			if b.eof {
+				break
+			}
 			goto Loop2
 		}
 		x := unhex(c)<<4 | unhex(c2)
@@ -466,8 +494,12 @@ func (b *buffer) readArray() object {
 	var x array
 	for {
 		tok := b.readToken()
-		// A content stream can end inside an array. readToken then answers
+		// A content array may be cut inside an array, so the array carries on
+		// into the next piece. At the end of the last piece readToken answers
 		// io.EOF on every call, so without this check the loop never ends.
+		if tok == io.EOF && b.advancePiece() {
+			continue
+		}
 		if tok == nil || tok == io.EOF || tok == keyword("]") {
 			break
 		}
