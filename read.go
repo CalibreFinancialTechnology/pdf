@@ -459,7 +459,12 @@ func findLastLine(buf []byte, s string) int {
 		if i <= 0 || i+len(bs) >= len(buf) {
 			return -1
 		}
-		if (buf[i-1] == '\n' || buf[i-1] == '\r') && (buf[i+len(bs)] == '\n' || buf[i+len(bs)] == '\r') {
+		// A line may end in spaces or tabs before its end-of-line marker.
+		j := i + len(bs)
+		for j < len(buf) && (buf[j] == ' ' || buf[j] == '\t') {
+			j++
+		}
+		if (buf[i-1] == '\n' || buf[i-1] == '\r') && j < len(buf) && (buf[j] == '\n' || buf[j] == '\r') {
 			return i
 		}
 		max = i
